@@ -14,11 +14,11 @@
         password: ""
         append: yes
 
-    - name: Set authorized key taken from file
+    - name: Set authorized key token from file
       ansible.posix.authorized_key:
         user: admin
         state: present
-        key: "{{ lookup('file', '/home/jane/.ssh/id_rsa.pub') }}"
+        key: "{{ lookup('file', '{{ssh_pub_key_path}}') }}"
 
     - name: Add admin user to sudo group
       lineinfile:
