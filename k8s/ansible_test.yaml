@@ -1,0 +1,13 @@
+---
+- name: "testing"
+  hosts: clusters
+  user: ubuntu
+  become: true
+  tasks:
+          - debug: msg="{{ansible_hostname}}"
+
+          - debug: msg="{{inventory_hostname}}"
+
+          - debug: msg="{{groups['masters']}}"
+
+          - debug: msg="{{groups['clusters']}}"
