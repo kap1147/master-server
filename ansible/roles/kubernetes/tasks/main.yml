@@ -1,0 +1,17 @@
+---
+- name: Install Kubernetes
+  include: install_kubernetes.yml
+  when:
+    - controller_operation == 'coldstart'
+
+- name: Configure and deploy control-plane.
+  include: deploy_masters.yml
+  when:
+    - controller_operation in ['coldstart','deploy_master']
+    - inventory_hostname in groups['masters']
+
+- name: Configure and deploy worker nodes 
+  include: deploy_workers.yml
+  when:
+    - controller_operation in ['coldstart','deploy_workers']
+    - inventory_hostname in groups['workers']

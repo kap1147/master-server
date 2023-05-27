@@ -1,0 +1,143 @@
+---
+- name: Provision firewall
+  community.general.ufw:
+    rule: "{{item.rule}}"
+    port: "{{item.port}}"
+    proto: "{{item.proto}}"
+  with_items: "{{firewall_rules_master}}"
+
+- name: Update hostname to "{{k8s_master_1_hostname}}"
+  shell: sudo hostnamectl set-hostname {{k8s_master_1_hostname}}
+
+- name: Configure kubelet
+  lineinfile:
+    path: /etc/default/kubelet
+    regexp: "{{item.regex}}"
+    line: "{{item.line}}"
+    create: true
+    owner: root
+    group: root
+  with_items:
+    - {'regex':'^KUBELET_EXTRA_ARGS=','line':'KUBELET_EXTRA_ARGS="--cgroup-driver=cgroupfs"'}
+
+- name: Restart Kubelet
+  ansible.builtin.systemd:
+    state: restarted
+    name: kubelet
+    daemon_reload: true
+
+- name: Configure Docker daemon
+  copy:
+    dest: /etc/docker/daemon.json
+    content: >-
+              {
+                "exec-opts": ["native.cgroupdriver=systemd"],
+                "log-driver": "json-file",
+                "log-opts": {
+                  "max-size": "100m"
+                },
+                "storage-driver": "overlay2"
+              }
+
+- name: Restart Docker
+  ansible.builtin.systemd:
+    state: restarted
+    name: docker
+    daemon_reload: true
+
+- name: Configure kubeadm
+  lineinfile:
+    path: /etc/systemd/system/kubelet.service.d/10-kubeadm.conf
+    regexp: "{{item.regex}}"
+    line: "{{item.line}}"
+    create: true
+    owner: root
+    group: root
+  with_items:
+    - {'regex':'^Environment="KUBELET_EXTRA_ARGS=','line':'Environment="KUBELET_EXTRA_ARGS=--fail-swap-on=false"'}
+
+- name: Restart Kubelet
+  ansible.builtin.systemd:
+    state: restarted
+    name: kubelet
+    daemon_reload: true
+
+- name: Initialize Cluster
+  become: true
+  shell: kubeadm init --control-plane-endpoint="{{k8s_master_1_fqdn}}" --upload-certs --pod-network-cidr="{{cluster_cidr}}" --ignore-preflight-errors="{{ignore_preflight_errors}}" > "{{kubeadm_init_log}}"
+
+- name: Fecth kube initialization log
+  shell: cat {{kubeadm_init_log}}
+  register: kube_config
+
+- name: Display {{kubeadm_init_log}}
+  debug: 
+      msg: "{{kube_config.stdout_lines}}"
+
+- name: Publish kube configurations for worker node consumption
+  vars:
+    pattern_token: '--token\s(?P<token>\w+\.\w+)'
+    pattern_hash: '--discovery-token-ca-cert-hash\s(?P<hash>\w+\:\w+)'
+  set_fact:
+    data:
+      kube:
+        config:
+          api_server: "{{k8s_master_1_fqdn + ':' + k8s_api_server_port|default('6443')}}"
+          token: "{{kube_config.stdout|regex_search(pattern_token, '\\g<token>', multiline=True) |first}}"
+          discovery_token_ca_cert_hash: "{{kube_config.stdout|regex_search(pattern_hash, '\\g<hash>', multiline=True) |first}}"
+
+- debug:
+    var: data
+
+- name: Create /home/{{new_user}}/.kube
+  ansible.builtin.file:
+    path: /home/{{new_user}}/.kube
+    state: directory
+    owner: "{{new_user}}"
+    group: "{{new_user}}"
+    mode: '0755'
+
+- name: Copy config
+  copy:
+    src: /etc/kubernetes/admin.conf
+    dest: /home/{{new_user}}/.kube/config
+    owner: "{{new_user}}"
+    group: "{{new_user}}"
+    remote_src: true
+
+- name: Confirm initialization is completed
+  shell: kubectl get nodes
+  become: false
+  retries: 10
+  delay: 10
+  register: result
+  until: result.rc == 0
+
+- name: Install Calico
+  shell: "{{item}}"
+  become: false
+  with_items:
+    - 'kubectl create -f https://raw.githubusercontent.com/projectcalico/calico/v3.25.1/manifests/tigera-operator.yaml'
+    - 'kubectl create -f https://raw.githubusercontent.com/projectcalico/calico/v3.25.1/manifests/custom-resources.yaml'
+    - 'kubectl taint nodes --all node-role.kubernetes.io/control-plane-'
+
+# - name: Install Flannel
+#   shell: "{{item}}"
+#   become: false
+#   with_items:
+#     - 'kubectl apply -f https://github.com/flannel-io/flannel/releases/latest/download/kube-flannel.yml'
+#     - 'kubectl taint nodes --all node-role.kubernetes.io/control-plane-'
+
+# - name: Configure Flannel
+#   lineinfile:
+#     path: /run/flannel/subnet.env
+#     regexp: "{{item.regex}}"
+#     line: "{{item.line}}"
+#     create: true
+#     owner: root
+#     group: root
+#   with_items:
+#     - {'regex':'^FLANNEL_NETWORK=','line':'FLANNEL_NETWORK=10.244.0.0/16'}
+#     - {'regex':'^FLANNEL_SUBNET=','line':'FLANNEL_SUBNET=10.244.0.1/24'}
+#     - {'regex':'^FLANNEL_MTU=','line':'FLANNEL_MTU=1450'}
+#     - {'regex':'^FLANNEL_IPMASQ=','line':'FLANNEL_IPMASQ="true"'}

@@ -1,0 +1,16 @@
+k8s_master_1_fqdn: k8s-master-01.theyardapp.com
+k8s_master_1_hostname: k8s-master-01
+#cluster_cidr: 10.244.0.0/16
+cluster_cidr: 192.168.0.0/16
+ignore_preflight_errors: NumCPU
+kubeadm_init_log: /tmp/kubeadm_init.log
+k8s_worker_1_fqdn: k8s-worker-01.theyardapp.com
+firewall_rules_master:
+  - {'rule':'allow','port':6443,'proto':'tcp'}
+  - {'rule':'allow','port':'2379:2380','proto':'tcp'}
+  - {'rule':'allow','port':10250,'proto':'tcp'}
+  - {'rule':'allow','port':10259,'proto':'tcp'}
+  - {'rule':'allow','port':10257,'proto':'tcp'}
+firewall_rules_worker:
+  - {'rule':'allow','port':10250,'proto':'tcp'}
+  - {'rule':'allow','port':'30000:32767','proto':'tcp'}

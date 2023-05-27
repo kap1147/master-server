@@ -1,0 +1,39 @@
+---
+- name: "Create admin user"
+  hosts: clusters
+  user: root
+  become: true
+  vars:
+    new_user: admin
+  tasks:
+    - name: Create user "{{new_user}}"
+      user:
+        name: "{{new_user}}"
+        shell: /bin/bash
+        createhome: yes
+        password: ""
+        append: yes
+
+    - name: Set authorized key taken from file
+      ansible.posix.authorized_key:
+        user: admin
+        state: present
+        key: "{{ lookup('file', '/home/jane/.ssh/id_rsa.pub') }}"
+
+    - name: Add admin user to sudo group
+      lineinfile:
+        dest: /etc/sudoers
+        line: '{{new_user}} ALL=(ALL) NOPASSWD: ALL'
+        validate: 'visudo -cf %s'
+        insertafter: '^%sudo\s'
+        state: present
+        backup: yes
+
+- name: "Deploy Kubernetes cluster."
+  hosts: clusters
+  user: admin
+  become: true
+  gather_facts: false
+  tasks:
+    - include_role:
+        name: kubernetes

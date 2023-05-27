@@ -1,0 +1,30 @@
+---
+- name: Provision firewall
+  community.general.ufw:
+    rule: "{{item.rule}}"
+    port: "{{item.port}}"
+    proto: "{{item.proto}}"
+  with_items: "{{firewall_rules_worker}}"
+
+- name: Update hostname to hostname to "{{k8s_worker_1_fqdn}}"
+  shell: sudo hostnamectl set-hostname {{k8s_worker_1_fqdn}}
+
+- name: Stop Apparmor
+  ansible.builtin.systemd:
+    name: apparmor
+    state: stopped
+
+- name: Disable Apparmor
+  ansible.builtin.systemd:
+    name: apparmor
+    enabled: false
+
+- name: Restart Containerd
+  ansible.builtin.systemd:
+    name: containerd.service
+    enabled: false
+
+- name: Join node into cluster
+  debug:
+    msg: "Join worker nodes."
+ # shell: kubeadm join {{data.kube.config.api_server}} --token {{data.kube.config.token}} --discovery-token-ca-cert-hash {{data.kube.config.discovery_token_ca_cert_hash}}
