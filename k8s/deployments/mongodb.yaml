@@ -1,0 +1,29 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mongdb-master-deployment
+  labels:
+    app: mongodb-master
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mongdb-master
+  template:
+    metadata:
+      labels:
+        app: mongdb-master
+    spec:
+      containers:
+        - name: mongdb-master
+          image: joshuad23/mongdb-master
+          ports:
+            - containerPort: 27017
+            - containerPort: 50001
+          volumeMounts:
+            - name: mongdb-persistent-storage
+              mountPath: /var/lib/mongdb
+      volumes:
+        - name: mongdb-persistent-storage
+          persistentVolumeClaim:
+            claimName: mongdb-pvc
